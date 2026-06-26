@@ -10,7 +10,7 @@
 <style>
   :root{
     --paper:#F3F1EA; --surface:#FCFBF7; --ink:#211E1A; --sub:#7C756B;
-    --line:#E2DDD1; --work:#4F6D4A; --thought:#B07D2B; --danger:#B4493C;
+    --line:#E2DDD1; --work:#4F6D4A; --thought:#B07D2B; --danger:#B4493C; --todo:#3E6E9E;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -84,7 +84,7 @@
   .editcard{background:var(--surface); border:1px solid var(--work); border-left:3px solid var(--work); border-radius:12px; padding:12px 13px;}
   .editcard.thought{border-color:var(--thought); border-left-color:var(--thought);}
   .segs{display:flex; gap:8px; margin-bottom:8px;}
-  .seg{flex:1; padding:7px 0; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--sub); font-size:13.5px; font-weight:600; cursor:pointer;}
+  .seg{flex:1; display:flex; align-items:center; justify-content:center; padding:7px 0; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--sub); font-size:13.5px; font-weight:600; cursor:pointer; text-align:center;}
   .seg.work.active{background:var(--work); border-color:var(--work); color:#fff;}
   .seg.thought.active{background:var(--thought); border-color:var(--thought); color:#fff;}
   .editta{width:100%; resize:none; border:1px solid var(--line); border-radius:10px; background:var(--paper); padding:9px 11px; font-size:15px; color:var(--ink); font-family:inherit; line-height:1.45; outline:none;}
@@ -143,12 +143,38 @@
   .cdot{width:5px; height:5px; border-radius:50%;}
   .cdot.w{background:var(--work);}
   .cdot.t{background:var(--thought);}
+
+  /* ── 할일 ── */
+  .seg.todo.active{background:var(--todo); border-color:var(--todo); color:#fff;}
+  .send.todo.on{background:var(--todo);}
+  .savebtn.todo{background:var(--todo);}
+  .editcard.todo{border-color:var(--todo); border-left-color:var(--todo);}
+  .todo > .editcard{flex:1;}
+  .todolist{margin-top:12px; display:flex; flex-direction:column; gap:8px;}
+  .todo{display:flex; gap:11px; align-items:flex-start;}
+  .check{flex-shrink:0; width:22px; height:22px; margin-top:1px; border-radius:7px; border:2px solid var(--line); background:var(--surface); cursor:pointer; position:relative; padding:0;}
+  .check.on{background:var(--todo); border-color:var(--todo);}
+  .check.on::after{content:"✓"; color:#fff; font-size:14px; font-weight:700; position:absolute; left:50%; top:50%; transform:translate(-50%,-55%);}
+  .tbody{flex:1; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:10px 13px; cursor:pointer;}
+  .ttext{margin:0; font-size:15px; line-height:1.5; color:var(--ink); white-space:pre-wrap;}
+  .todo.done .ttext{color:var(--sub); text-decoration:line-through;}
+  .tdue{display:inline-block; margin-top:5px; font-size:12px; color:var(--sub); font-weight:600;}
+  .tdue.over{color:var(--danger);}
+  .donetoggle{margin-top:6px; width:100%; background:none; border:none; border-top:1px dashed var(--line); padding:13px 0 4px; color:var(--sub); font-size:12.5px; font-weight:600; cursor:pointer; text-align:center;}
+  .donetoggle span{color:var(--ink); margin-left:4px;}
+
+  /* ── 일 보기 맨 위 '할 일' ── */
+  .dayplan{margin-top:12px; margin-bottom:8px; background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--todo); border-radius:12px; padding:11px 13px;}
+  .planhead{font-size:11.5px; font-weight:700; color:var(--todo); margin-bottom:7px;}
+  .planrow{display:flex; align-items:center; gap:11px; padding:5px 0;}
+  .plantext{font-size:14.5px; color:var(--ink); line-height:1.4;}
+  .editrow input[type=date]{border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--ink); font-size:13.5px; font-family:inherit; padding:4px 8px; outline:none;}
 </style>
 </head>
 <body>
   <header>
     <div class="filebar">
-      <div class="viewtoggle">
+      <div class="viewtoggle" id="viewtoggle">
         <button class="vt active" id="vtDay">일</button>
         <button class="vt" id="vtMonth">월</button>
       </div>
@@ -178,13 +204,22 @@
     <div class="segs">
       <button class="seg work active" id="segWork">기록</button>
       <button class="seg thought" id="segThought">생각</button>
+      <button class="seg todo" id="segTodo">할일</button>
     </div>
-    <div class="timerow">
+    <div class="timerow" id="timerow">
       <span class="lab">시각</span>
       <button class="chip active" id="chipNow">지금</button>
       <label class="chip" id="chipCustom">
         <span>시간 지정</span>
         <input type="time" id="timeInput" />
+      </label>
+    </div>
+    <div class="timerow" id="duerow" style="display:none">
+      <span class="lab">마감일</span>
+      <button class="chip active" id="chipNoDue">없음</button>
+      <label class="chip" id="chipDue">
+        <span>날짜 지정</span>
+        <input type="date" id="dueInput" />
       </label>
     </div>
     <div class="inputrow">
@@ -212,12 +247,20 @@
   try{ var raw = store.get(STORE_KEY); data = raw ? JSON.parse(raw) : {}; }catch(e){ data = {}; }
   if(!data || typeof data !== "object") data = {};
 
+  var todos = [];
+  try{ var rawT = store.get("todos-all"); todos = rawT ? JSON.parse(rawT) : []; }catch(e){ todos = []; }
+  if(!Array.isArray(todos)) todos = [];
+
   var date = new Date();
   var view = "day";             // "day" | "month"
-  var type = "work";            // "work" | "thought"
+  var type = "work";            // "work" | "thought" | "todo"
   var customTime = null;        // null = 지금, else "HH:MM"
-  var openId = null;            // 동작(수정/삭제)이 열린 항목
-  var editId = null;            // 편집 중인 항목
+  var customDue = null;         // null = 없음, else "YYYY-MM-DD"
+  var openId = null;            // 다이어리 동작 열림
+  var editId = null;            // 다이어리 편집 중
+  var todoOpenId = null;        // 할일 동작 열림
+  var todoEditId = null;        // 할일 편집 중
+  var showDone = false;         // 완료한 할 일 펼치기
 
   var DAYS = ["일","월","화","수","목","금","토"];
 
@@ -264,15 +307,20 @@
   var timeline = document.getElementById("timeline");
   var bottom = document.getElementById("bottom");
   var nextBtn = document.getElementById("nextBtn");
+  var prevBtn = document.getElementById("prevBtn");
 
-  function applyView(){
-    document.getElementById("composer").style.display = (view==="month") ? "none" : "block";
-  }
+  function persistTodos(){ store.set("todos-all", JSON.stringify(todos)); }
 
   function render(){
-    applyView();
-    if(view==="month") renderMonth();
-    else renderDay();
+    var todoMode = (type === "todo");
+    document.getElementById("viewtoggle").style.display = todoMode ? "none" : "flex";
+    prevBtn.style.visibility = todoMode ? "hidden" : "visible";
+    nextBtn.style.visibility = todoMode ? "hidden" : "visible";
+    // 입력창: 다이어리 '월 보기'에서만 숨김
+    document.getElementById("composer").style.display = (!todoMode && view==="month") ? "none" : "block";
+    if(todoMode){ renderTodos(); }
+    else if(view==="month"){ renderMonth(); }
+    else { renderDay(); }
   }
 
   function renderDay(){
@@ -304,8 +352,11 @@
     var tb = document.getElementById("todayBtn");
     if(tb) tb.onclick = function(){ goToday(); };
 
-    // 타임라인
-    if(list.length === 0){
+    // 이 날 마감인 할 일 (완료 안 한 것)
+    var dayKey2 = keyOf(date);
+    var dayTodos = todos.filter(function(t){ return !t.done && t.due === dayKey2; });
+
+    if(list.length === 0 && dayTodos.length === 0){
       timeline.innerHTML =
         '<div class="empty"><div class="ico">🗒️</div><p>'+
         (isToday ? '오늘의 첫 기록을 남겨보세요.<br>하루가 끝나면 여기에 정리돼요.' : '이 날엔 기록이 없어요.')+
@@ -313,27 +364,44 @@
       return;
     }
 
-    var html = '<div class="thread">';
-    list.forEach(function(e){
-      var isWork = e.type === "work";
-      if(e.id === editId){
-        html += renderEdit(e, isWork);
-      } else {
-        var nodeCls = isWork ? "work" : "thought";
-        var acts = (e.id === openId)
-          ? '<div class="actions"><button class="editbtn" data-action="edit" data-id="'+e.id+'">수정</button>'
-            + '<button class="delbtn" data-action="delete" data-id="'+e.id+'">삭제</button></div>'
-          : '';
-        html += '<div class="entry">'
-          + '<span class="node '+nodeCls+'"></span>'
-          + '<div class="card '+nodeCls+'" data-action="toggle" data-id="'+e.id+'">'
-          + '<div class="meta"><span class="time">'+fmtTime(e.at)+'</span>'
-          + '<span class="tag '+nodeCls+'">'+(isWork?"기록":"생각")+'</span></div>'
-          + '<p class="text '+(isWork?"":"thought")+'">'+esc(e.text)+'</p>'
-          + acts + '</div></div>';
-      }
-    });
-    html += '</div>';
+    var html = "";
+
+    // 맨 위: 그날 할 일
+    if(dayTodos.length){
+      html += '<div class="dayplan"><div class="planhead">할 일</div>';
+      dayTodos.forEach(function(t){
+        html += '<div class="planrow">'
+          + '<button class="check" data-action="todocheck" data-id="'+t.id+'"></button>'
+          + '<span class="plantext">'+esc(t.text)+'</span></div>';
+      });
+      html += '</div>';
+    }
+
+    // 타임라인
+    if(list.length){
+      html += '<div class="thread">';
+      list.forEach(function(e){
+        var isWork = e.type === "work";
+        if(e.id === editId){
+          html += renderEdit(e, isWork);
+        } else {
+          var nodeCls = isWork ? "work" : "thought";
+          var acts = (e.id === openId)
+            ? '<div class="actions"><button class="editbtn" data-action="edit" data-id="'+e.id+'">수정</button>'
+              + '<button class="delbtn" data-action="delete" data-id="'+e.id+'">삭제</button></div>'
+            : '';
+          html += '<div class="entry">'
+            + '<span class="node '+nodeCls+'"></span>'
+            + '<div class="card '+nodeCls+'" data-action="toggle" data-id="'+e.id+'">'
+            + '<div class="meta"><span class="time">'+fmtTime(e.at)+'</span>'
+            + '<span class="tag '+nodeCls+'">'+(isWork?"기록":"생각")+'</span></div>'
+            + '<p class="text '+(isWork?"":"thought")+'">'+esc(e.text)+'</p>'
+            + acts + '</div></div>';
+        }
+      });
+      html += '</div>';
+    }
+
     timeline.innerHTML = html;
   }
 
@@ -386,6 +454,73 @@
     timeline.innerHTML = html;
   }
 
+  function fmtDue(due){ var p = due.split("-"); return Number(p[1])+"월 "+Number(p[2])+"일"; }
+
+  function todoRow(t, todayKey){
+    if(t.id === todoEditId) return renderTodoEdit(t);
+    var over = t.due && !t.done && t.due < todayKey;
+    var acts = (t.id === todoOpenId)
+      ? '<div class="actions"><button class="editbtn" data-action="todoedit" data-id="'+t.id+'">수정</button>'
+        + '<button class="delbtn" data-action="tododelete" data-id="'+t.id+'">삭제</button></div>'
+      : '';
+    return '<div class="todo'+(t.done?' done':'')+'">'
+      + '<button class="check'+(t.done?' on':'')+'" data-action="todocheck" data-id="'+t.id+'"></button>'
+      + '<div class="tbody" data-action="todotoggle" data-id="'+t.id+'">'
+      + '<p class="ttext">'+esc(t.text)+'</p>'
+      + (t.due ? '<span class="tdue'+(over?' over':'')+'">'+fmtDue(t.due)+'까지'+(over?' · 지남':'')+'</span>' : '')
+      + acts + '</div></div>';
+  }
+
+  function dueAsc(a,b){
+    var ad = a.due || "9999-99-99", bd = b.due || "9999-99-99";
+    return ad < bd ? -1 : (ad > bd ? 1 : a.id - b.id);
+  }
+
+  function renderTodos(){
+    dtitle.textContent = "할 일";
+    dyear.innerHTML = "&nbsp;";
+
+    var activeList = todos.filter(function(t){ return !t.done; });
+    var doneList = todos.filter(function(t){ return t.done; });
+
+    summary.innerHTML = todos.length===0
+      ? '<span>할 일이 없어요</span>'
+      : '<span>남은 일 '+activeList.length+'</span><span>완료 '+doneList.length+'</span>';
+
+    if(todos.length === 0){
+      timeline.innerHTML = '<div class="empty"><div class="ico">✅</div><p>다음에 할 일을 추가해보세요.<br>마감일도 함께 정할 수 있어요.</p></div>';
+      return;
+    }
+
+    var todayKey = keyOf(new Date());
+    var html = '<div class="todolist">';
+    activeList.sort(dueAsc).forEach(function(t){ html += todoRow(t, todayKey); });
+
+    if(doneList.length){
+      html += '<button class="donetoggle" data-action="toggledone">완료 '+doneList.length+'개'
+        + '<span>'+(showDone ? '숨기기 ▲' : '모아보기 ▼')+'</span></button>';
+      if(showDone){
+        doneList.sort(dueAsc).forEach(function(t){ html += todoRow(t, todayKey); });
+      }
+    }
+    html += '</div>';
+    timeline.innerHTML = html;
+  }
+
+  function renderTodoEdit(t){
+    return '<div class="todo">'
+      + '<button class="check'+(t.done?' on':'')+'" disabled></button>'
+      + '<div class="editcard todo">'
+      + '<textarea class="editta" rows="2">'+esc(t.text)+'</textarea>'
+      + '<div class="editrow">'
+      +   '<label>마감일<input type="date" value="'+(t.due||"")+'"></label>'
+      +   '<div class="sp">'
+      +     '<button class="cancelbtn" data-action="todocancel">취소</button>'
+      +     '<button class="savebtn todo" data-action="todosave" data-id="'+t.id+'">저장</button>'
+      +   '</div>'
+      + '</div></div></div>';
+  }
+
   function renderEdit(e, isWork){
     var draftType = e.type;
     var cls = draftType==="work" ? "work" : "thought";
@@ -425,6 +560,61 @@
       view = "day";
       syncViewToggle();
       afterDateChange();
+    }
+    else if(action === "todocheck"){
+      var tid = Number(id), tt = null;
+      for(var ti=0; ti<todos.length; ti++){ if(todos[ti].id===tid){ tt=todos[ti]; break; } }
+      if(!tt) return;
+      if(!tt.done){
+        // 완료 → 오늘 날짜 다이어리에 '기록' 자동 추가
+        var nowKey = keyOf(new Date());
+        var eid = Date.now();
+        var entry = { id:eid, at:new Date().toISOString(), type:"work", text:"✓ "+tt.text, fromTodo:tt.id };
+        data[nowKey] = (data[nowKey]||[]).concat([entry]).sort(bySort);
+        tt.done = true;
+        tt.doneRef = { key:nowKey, id:eid };
+        persist(); persistTodos();
+      } else {
+        // 완료 취소 → 자동으로 만들었던 기록 제거
+        if(tt.doneRef && data[tt.doneRef.key]){
+          var rid = tt.doneRef.id;
+          data[tt.doneRef.key] = data[tt.doneRef.key].filter(function(e){ return e.id !== rid; });
+          persist();
+        }
+        tt.done = false;
+        tt.doneRef = null;
+        persistTodos();
+      }
+      render();
+    }
+    else if(action === "todotoggle"){
+      var tid2 = Number(id);
+      todoOpenId = (todoOpenId === tid2) ? null : tid2;
+      render();
+    }
+    else if(action === "todoedit"){
+      todoEditId = Number(id); todoOpenId = null; render();
+    }
+    else if(action === "tododelete"){
+      var tid3 = Number(id);
+      todos = todos.filter(function(x){ return x.id !== tid3; });
+      persistTodos(); render();
+    }
+    else if(action === "todocancel"){
+      todoEditId = null; render();
+    }
+    else if(action === "toggledone"){
+      showDone = !showDone; render();
+    }
+    else if(action === "todosave"){
+      var card = t.closest(".editcard");
+      var newText = card.querySelector(".editta").value.trim();
+      if(!newText) return;
+      var newDue = card.querySelector('input[type=date]').value || null;
+      var tid4 = Number(id);
+      todos = todos.map(function(x){ return x.id===tid4 ? {id:x.id,text:newText,due:newDue,done:x.done,doneRef:x.doneRef} : x; });
+      todoEditId = null;
+      persistTodos(); render();
     }
     else if(action === "edit"){
       editId = Number(id); openId = null; render();
@@ -503,14 +693,25 @@
   var sendBtn = document.getElementById("send");
   var segWork = document.getElementById("segWork");
   var segThought = document.getElementById("segThought");
+  var segTodo = document.getElementById("segTodo");
   var chipNow = document.getElementById("chipNow");
   var chipCustom = document.getElementById("chipCustom");
   var timeInput = document.getElementById("timeInput");
+  var chipNoDue = document.getElementById("chipNoDue");
+  var chipDue = document.getElementById("chipDue");
+  var dueInput = document.getElementById("dueInput");
+  var timerow = document.getElementById("timerow");
+  var duerow = document.getElementById("duerow");
 
   function syncSegs(){
     segWork.classList.toggle("active", type==="work");
     segThought.classList.toggle("active", type==="thought");
-    ta.placeholder = type==="work" ? "지금 무엇을 하고 있나요?" : "떠오른 생각을 적어보세요";
+    segTodo.classList.toggle("active", type==="todo");
+    ta.placeholder = type==="work" ? "지금 무엇을 하고 있나요?"
+      : type==="thought" ? "떠오른 생각을 적어보세요"
+      : "다음에 할 일을 입력하세요";
+    timerow.style.display = type==="todo" ? "none" : "flex";
+    duerow.style.display  = type==="todo" ? "flex" : "none";
     syncSend();
   }
   function syncSend(){
@@ -522,11 +723,28 @@
     chipCustom.classList.toggle("active", custom);
     timeInput.value = customTime !== null ? customTime : nowHHMM();
   }
+  function syncDueChips(){
+    var has = customDue !== null;
+    chipNoDue.classList.toggle("active", !has);
+    chipDue.classList.toggle("active", has);
+    dueInput.value = customDue !== null ? customDue : "";
+  }
 
-  segWork.onclick = function(){ type="work"; syncSegs(); };
-  segThought.onclick = function(){ type="thought"; syncSegs(); };
+  function setType(t){
+    type = t;
+    openId = null; editId = null;
+    syncSegs();
+    render();
+  }
+  segWork.onclick = function(){ setType("work"); };
+  segThought.onclick = function(){ setType("thought"); };
+  segTodo.onclick = function(){ setType("todo"); };
+
   chipNow.onclick = function(){ customTime=null; syncTimeChips(); };
   timeInput.onchange = function(){ customTime = timeInput.value; syncTimeChips(); };
+  chipNoDue.onclick = function(){ customDue=null; syncDueChips(); };
+  dueInput.onchange = function(){ customDue = dueInput.value || null; syncDueChips(); };
+
   ta.addEventListener("input", syncSend);
   ta.addEventListener("keydown", function(ev){
     if(ev.key==="Enter" && !ev.shiftKey){ ev.preventDefault(); add(); }
@@ -536,6 +754,15 @@
   function add(){
     var txt = ta.value.trim();
     if(!txt) return;
+
+    if(type === "todo"){
+      todos.push({ id:Date.now(), text:txt, due:customDue||null, done:false });
+      ta.value = ""; syncSend();
+      persistTodos();
+      render();
+      return;
+    }
+
     var at = new Date(date);
     var tm = (customTime !== null ? customTime : nowHHMM()).split(":");
     at.setHours(Number(tm[0]), Number(tm[1]), 0, 0);
@@ -549,7 +776,8 @@
 
   // ── 파일 ──
   document.getElementById("exportBtn").onclick = function(){
-    var blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+    var payload = { diary: data, todos: todos };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url; a.download = "다이어리-"+keyOf(new Date())+".json";
@@ -568,18 +796,36 @@
       try{
         var incoming = JSON.parse(reader.result);
         if(!incoming || typeof incoming !== "object") throw new Error();
+
+        // 새 형식({diary, todos}) 또는 옛 형식(날짜키 객체) 모두 지원
+        var diaryIn, todosIn = null;
+        if(incoming.diary || incoming.todos){
+          diaryIn = incoming.diary || {};
+          todosIn = Array.isArray(incoming.todos) ? incoming.todos : [];
+        } else {
+          diaryIn = incoming;
+        }
+
         var added = 0;
-        Object.keys(incoming).forEach(function(k){
+        Object.keys(diaryIn).forEach(function(k){
           var cur = data[k] || [];
           var ids = {};
           cur.forEach(function(e){ ids[e.id]=true; });
-          var extra = (incoming[k]||[]).filter(function(e){ return e && !ids[e.id]; });
+          var extra = (diaryIn[k]||[]).filter(function(e){ return e && !ids[e.id]; });
           added += extra.length;
           data[k] = cur.concat(extra).sort(bySort);
         });
+
+        if(todosIn){
+          var tids = {};
+          todos.forEach(function(x){ tids[x.id]=true; });
+          todosIn.forEach(function(x){ if(x && !tids[x.id]){ todos.push(x); added++; } });
+          persistTodos();
+        }
+
         persist();
         render();
-        flash(added>0 ? (added+"개 기록을 불러왔어요") : "새로 추가된 기록이 없어요");
+        flash(added>0 ? (added+"개 불러왔어요") : "새로 추가된 항목이 없어요");
       }catch(e){
         flash("파일을 읽을 수 없어요");
       }
@@ -590,6 +836,7 @@
   // ── 시작 ──
   syncSegs();
   syncTimeChips();
+  syncDueChips();
   syncViewToggle();
   render();
 })();
