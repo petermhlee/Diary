@@ -87,7 +87,7 @@
   .seg{flex:1; display:flex; align-items:center; justify-content:center; padding:7px 0; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--sub); font-size:13.5px; font-weight:600; cursor:pointer; text-align:center;}
   .seg.work.active{background:var(--work); border-color:var(--work); color:#fff;}
   .seg.thought.active{background:var(--thought); border-color:var(--thought); color:#fff;}
-  .editta{width:100%; resize:none; border:1px solid var(--line); border-radius:10px; background:var(--paper); padding:9px 11px; font-size:15px; color:var(--ink); font-family:inherit; line-height:1.45; outline:none;}
+  .editta{width:100%; resize:none; border:1px solid var(--line); border-radius:10px; background:var(--paper); padding:9px 11px; font-size:15px; color:var(--ink); font-family:inherit; line-height:1.5; min-height:120px; max-height:300px; overflow-y:auto; outline:none;}
   .editrow{display:flex; align-items:center; gap:10px; margin-top:10px;}
   .editrow label{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--sub);}
   .editrow input[type=time]{border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--ink); font-size:13.5px; font-family:inherit; padding:4px 8px; outline:none;}
@@ -109,7 +109,7 @@
   .inputrow{display:flex; gap:8px; align-items:flex-end;}
   .inputrow textarea{
     flex:1; resize:none; border:1px solid var(--line); border-radius:14px; background:var(--surface);
-    padding:11px 14px; font-size:15px; color:var(--ink); font-family:inherit; line-height:1.45; max-height:120px; outline:none;
+    padding:11px 14px; font-size:15px; color:var(--ink); font-family:inherit; line-height:1.5; min-height:48px; max-height:220px; overflow-y:auto; outline:none;
   }
   .send{flex-shrink:0; width:46px; height:46px; border-radius:50%; border:none; background:var(--line); color:#fff; font-size:20px; cursor:pointer; transition:background .15s;}
   .send.work.on{background:var(--work);} .send.thought.on{background:var(--thought);}
@@ -311,6 +311,16 @@
 
   function persistTodos(){ store.set("todos-all", JSON.stringify(todos)); }
 
+  function autoGrow(el){
+    if(!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
+  function growEdits(){
+    var t = timeline.querySelector(".editta");
+    if(t) autoGrow(t);
+  }
+
   function render(){
     var todoMode = (type === "todo");
     document.getElementById("viewtoggle").style.display = todoMode ? "none" : "flex";
@@ -321,6 +331,7 @@
     if(todoMode){ renderTodos(); }
     else if(view==="month"){ renderMonth(); }
     else { renderDay(); }
+    growEdits();
   }
 
   function renderDay(){
@@ -655,6 +666,12 @@
     }
   });
 
+  timeline.addEventListener("input", function(ev){
+    if(ev.target && ev.target.classList && ev.target.classList.contains("editta")){
+      autoGrow(ev.target);
+    }
+  });
+
   // ── 날짜 이동 ──
   function shiftDay(n){
     var d = new Date(date); d.setDate(d.getDate()+n); date = d;
@@ -745,7 +762,7 @@
   chipNoDue.onclick = function(){ customDue=null; syncDueChips(); };
   dueInput.onchange = function(){ customDue = dueInput.value || null; syncDueChips(); };
 
-  ta.addEventListener("input", syncSend);
+  ta.addEventListener("input", function(){ syncSend(); autoGrow(ta); });
   ta.addEventListener("keydown", function(ev){
     if(ev.key==="Enter" && !ev.shiftKey){ ev.preventDefault(); add(); }
   });
@@ -757,7 +774,7 @@
 
     if(type === "todo"){
       todos.push({ id:Date.now(), text:txt, due:customDue||null, done:false });
-      ta.value = ""; syncSend();
+      ta.value = ""; syncSend(); autoGrow(ta);
       persistTodos();
       render();
       return;
@@ -770,6 +787,7 @@
     var list = entriesOf(date).concat([entry]).sort(bySort);
     ta.value = "";
     syncSend();
+    autoGrow(ta);
     setDay(list);
     setTimeout(function(){ bottom.scrollIntoView({behavior:"smooth"}); }, 30);
   }
