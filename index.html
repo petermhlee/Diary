@@ -340,9 +340,11 @@
     var list = entriesOf(date);
 
     // 헤더
+    var relDays = Math.round((new Date(date.getFullYear(),date.getMonth(),date.getDate()) - new Date(today.getFullYear(),today.getMonth(),today.getDate())) / 86400000);
+    var relLabel = relDays===0 ? "오늘" : relDays===1 ? "내일" : relDays===-1 ? "어제" : "";
     dtitle.textContent = (date.getMonth()+1)+"월 "+date.getDate()+"일 "+DAYS[date.getDay()]+"요일";
-    dyear.innerHTML = date.getFullYear() + (isToday ? ' <span class="badge">오늘</span>' : '');
-    nextBtn.disabled = isToday;
+    dyear.innerHTML = date.getFullYear() + (relLabel ? ' <span class="badge">'+relLabel+'</span>' : '');
+    nextBtn.disabled = false;   // 미래 날짜도 이동/입력 허용
 
     // 요약
     var work = list.filter(function(e){return e.type==="work";}).length;
@@ -425,7 +427,7 @@
     // 헤더
     dtitle.textContent = y + "년 " + (mo+1) + "월";
     dyear.innerHTML = isCurMonth ? '<span class="badge">이번 달</span>' : '&nbsp;';
-    nextBtn.disabled = isCurMonth || isFutureMonth;
+    nextBtn.disabled = false;   // 미래 달도 이동 허용
 
     // 한 달 요약
     var daysInMonth = new Date(y, mo+1, 0).getDate();
