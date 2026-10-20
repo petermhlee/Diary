@@ -123,6 +123,16 @@
   }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
+  /* ── 불러오기 선택 모달 ── */
+  .modal{position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:flex-end; justify-content:center; z-index:30;}
+  .modal.show{display:flex;}
+  .sheet{width:100%; max-width:440px; background:var(--paper); border-radius:18px 18px 0 0; padding:20px 20px calc(18px + env(safe-area-inset-bottom)); box-shadow:0 -4px 24px rgba(0,0,0,.18);}
+  .mtitle{font-size:16.5px; font-weight:700; margin-bottom:6px;}
+  .mdesc{font-size:13px; color:var(--sub); line-height:1.55; margin-bottom:16px;}
+  .mbtn{width:100%; padding:13px; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:15px; font-weight:600; cursor:pointer; margin-bottom:8px;}
+  .mbtn.primary{background:var(--work); border-color:var(--work); color:#fff;}
+  .mbtn.ghost{background:none; border:none; color:var(--sub); margin-bottom:0;}
+
   /* ── view toggle ── */
   .viewtoggle{display:flex; gap:4px; background:var(--surface); border:1px solid var(--line); border-radius:9px; padding:2px;}
   .vt{border:none; background:transparent; color:var(--sub); font-size:13px; font-weight:700; padding:4px 13px; border-radius:7px; cursor:pointer;}
@@ -229,6 +239,16 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <div class="modal" id="importModal">
+    <div class="sheet">
+      <div class="mtitle">파일을 어떻게 불러올까요?</div>
+      <div class="mdesc">컴퓨터에서 수정한 내용을 반영하려면 <b>덮어쓰기</b>를 고르세요. 여러 기기의 기록을 모으려면 <b>합치기</b>를 쓰세요.</div>
+      <button class="mbtn primary" id="impReplace">이 파일로 덮어쓰기</button>
+      <button class="mbtn" id="impMerge">기존과 합치기</button>
+      <button class="mbtn ghost" id="impCancel">취소</button>
+    </div>
+  </div>
 
 <script>
 (function(){
@@ -807,6 +827,10 @@
   };
   var fileInput = document.getElementById("fileInput");
   document.getElementById("importBtn").onclick = function(){ fileInput.click(); };
+
+  var pendingImport = null; // { diaryIn, todosIn }
+  var modal = document.getElementById("importModal");
+
   fileInput.onchange = function(){
     var file = fileInput.files && fileInput.files[0];
     fileInput.value = "";
@@ -816,42 +840,60 @@
       try{
         var incoming = JSON.parse(reader.result);
         if(!incoming || typeof incoming !== "object") throw new Error();
-
-        // 새 형식({diary, todos}) 또는 옛 형식(날짜키 객체) 모두 지원
-        var diaryIn, todosIn = null;
+        var diaryIn, todosIn = [];
         if(incoming.diary || incoming.todos){
           diaryIn = incoming.diary || {};
           todosIn = Array.isArray(incoming.todos) ? incoming.todos : [];
         } else {
-          diaryIn = incoming;
+          diaryIn = incoming; // 옛 형식(날짜키 객체)
         }
-
-        var added = 0;
-        Object.keys(diaryIn).forEach(function(k){
-          var cur = data[k] || [];
-          var ids = {};
-          cur.forEach(function(e){ ids[e.id]=true; });
-          var extra = (diaryIn[k]||[]).filter(function(e){ return e && !ids[e.id]; });
-          added += extra.length;
-          data[k] = cur.concat(extra).sort(bySort);
-        });
-
-        if(todosIn){
-          var tids = {};
-          todos.forEach(function(x){ tids[x.id]=true; });
-          todosIn.forEach(function(x){ if(x && !tids[x.id]){ todos.push(x); added++; } });
-          persistTodos();
-        }
-
-        persist();
-        render();
-        flash(added>0 ? (added+"개 불러왔어요") : "새로 추가된 항목이 없어요");
+        pendingImport = { diaryIn: diaryIn, todosIn: todosIn };
+        modal.classList.add("show");
       }catch(e){
         flash("파일을 읽을 수 없어요");
       }
     };
     reader.readAsText(file);
   };
+
+  function closeModal(){ modal.classList.remove("show"); pendingImport = null; }
+
+  // 덮어쓰기: 파일 내용으로 완전히 교체 (수정·삭제까지 반영)
+  document.getElementById("impReplace").onclick = function(){
+    if(!pendingImport) return closeModal();
+    var newData = {};
+    Object.keys(pendingImport.diaryIn).forEach(function(k){
+      newData[k] = (pendingImport.diaryIn[k]||[]).slice().sort(bySort);
+    });
+    data = newData;
+    todos = pendingImport.todosIn.slice();
+    persist(); persistTodos();
+    modal.classList.remove("show"); pendingImport = null;
+    render();
+    flash("파일 내용으로 덮어썼어요");
+  };
+
+  // 합치기: 같은 id는 파일 내용으로 갱신, 없는 건 추가 (기기별 내용 유지)
+  document.getElementById("impMerge").onclick = function(){
+    if(!pendingImport) return closeModal();
+    Object.keys(pendingImport.diaryIn).forEach(function(k){
+      var map = {};
+      (data[k]||[]).forEach(function(e){ map[e.id]=e; });
+      (pendingImport.diaryIn[k]||[]).forEach(function(e){ if(e) map[e.id]=e; }); // 파일이 우선
+      data[k] = Object.keys(map).map(function(id){ return map[id]; }).sort(bySort);
+    });
+    var tmap = {};
+    todos.forEach(function(x){ tmap[x.id]=x; });
+    pendingImport.todosIn.forEach(function(x){ if(x) tmap[x.id]=x; });
+    todos = Object.keys(tmap).map(function(id){ return tmap[id]; });
+    persist(); persistTodos();
+    modal.classList.remove("show"); pendingImport = null;
+    render();
+    flash("기존 기록과 합쳤어요");
+  };
+
+  document.getElementById("impCancel").onclick = closeModal;
+  modal.addEventListener("click", function(ev){ if(ev.target === modal) closeModal(); });
 
   // ── 시작 ──
   syncSegs();
